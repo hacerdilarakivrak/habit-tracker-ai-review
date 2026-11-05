@@ -58,9 +58,7 @@ class CheckinIn(BaseModel):
 @app.post("/habits")
 def create_habit(habit: HabitIn):
     if not habit.name.strip():
-        raise HTTPException(
-            status_code=400, detail="habit name must not be empty"
-        )
+        raise HTTPException(status_code=400, detail="habit name must not be empty")
     with closing(get_db()) as conn:
         cur = conn.execute("INSERT INTO habits (name) VALUES (?)", (habit.name,))
         conn.commit()
