@@ -88,6 +88,25 @@ def test_summary_normalizes_and_rejects_noncanonical_stored_days(client, monkeyp
     assert r.json() == {"habit_id": hid, "count": 1}
 
 
+def test_summary_uses_local_date_for_timezone_offset_checkin(client, monkeypatch):
+    class FixedDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 11, 1)
+
+    monkeypatch.setattr(main, "date", FixedDate)
+    hid = client.post("/habits", json={"name": "Read"}).json()["id"]
+    with sqlite3.connect(main.DB_PATH) as conn:
+        conn.execute(
+            "INSERT INTO checkins (habit_id, day) VALUES (?, ?)",
+            (hid, "2026-10-26T00:30:00+02:00"),
+        )
+
+    r = client.get(f"/habits/{hid}/summary")
+    assert r.status_code == 200
+    assert r.json() == {"habit_id": hid, "count": 1}
+
+
 def test_client_uses_an_isolated_temporary_database(client, tmp_path):
     assert main.DB_PATH == tmp_path / "habits.db"
     assert client.get("/habits").json() == []

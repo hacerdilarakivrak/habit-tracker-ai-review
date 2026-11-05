@@ -111,9 +111,10 @@ def habit_summary(habit_id: int):
         if habit is None:
             raise HTTPException(status_code=404, detail="unknown habit")
         row = conn.execute(
-            """SELECT COUNT(DISTINCT date(day)) AS count FROM checkins
+            """SELECT COUNT(DISTINCT substr(day, 1, 10)) AS count FROM checkins
                WHERE habit_id = ?
-                 AND date(day) BETWEEN ? AND ?
+                 AND substr(day, 1, 10) BETWEEN ? AND ?
+                 AND date(day) IS NOT NULL
                  AND substr(day, 1, 10) = strftime(
                      '%Y-%m-%d', julianday(substr(day, 1, 10))
                  )""",
