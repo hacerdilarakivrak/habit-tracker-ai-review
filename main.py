@@ -11,15 +11,15 @@ Test:
 """
 
 import sqlite3
-from contextlib import closing
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, closing
+from datetime import date, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 DB_PATH = Path(__file__).parent / "habits.db"
-
-app = FastAPI(title="Habit Tracker")
 
 
 def get_db() -> sqlite3.Connection:
@@ -43,7 +43,13 @@ def init_db() -> None:
         conn.commit()
 
 
-init_db()
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    init_db()
+    yield
+
+
+app = FastAPI(title="Habit Tracker", lifespan=lifespan)
 
 
 class HabitIn(BaseModel):
@@ -92,3 +98,26 @@ def list_checkins(habit_id: int):
             "SELECT day FROM checkins WHERE habit_id = ? ORDER BY day", (habit_id,)
         ).fetchall()
     return [r["day"] for r in rows]
+
+
+@app.get("/habits/{habit_id}/summary")
+def habit_summary(habit_id: int):
+    today = date.today()
+    first_day = today - timedelta(days=6)
+    with closing(get_db()) as conn:
+        habit = conn.execute(
+            "SELECT id FROM habits WHERE id = ?", (habit_id,)
+        ).fetchone()
+        if habit is None:
+            raise HTTPException(status_code=404, detail="unknown habit")
+        row = conn.execute(
+            """SELECT COUNT(DISTINCT substr(day, 1, 10)) AS count FROM checkins
+               WHERE habit_id = ?
+                 AND substr(day, 1, 10) BETWEEN ? AND ?
+                 AND date(day) IS NOT NULL
+                 AND substr(day, 1, 10) = strftime(
+                     '%Y-%m-%d', julianday(substr(day, 1, 10))
+                 )""",
+            (habit_id, first_day.isoformat(), today.isoformat()),
+        ).fetchone()
+    return {"habit_id": habit_id, "count": row["count"]}
