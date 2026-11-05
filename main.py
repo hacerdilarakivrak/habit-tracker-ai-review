@@ -12,6 +12,7 @@ Test:
 
 import sqlite3
 from contextlib import closing
+from datetime import date
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -56,6 +57,8 @@ class CheckinIn(BaseModel):
 
 @app.post("/habits")
 def create_habit(habit: HabitIn):
+    if not habit.name.strip():
+        raise HTTPException(status_code=400, detail="habit name must not be empty")
     with closing(get_db()) as conn:
         cur = conn.execute("INSERT INTO habits (name) VALUES (?)", (habit.name,))
         conn.commit()
@@ -71,6 +74,19 @@ def list_habits():
 
 @app.post("/habits/{habit_id}/checkin")
 def add_checkin(habit_id: int, checkin: CheckinIn):
+    try:
+        parsed_day = date.fromisoformat(checkin.day)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="day must be a valid date in YYYY-MM-DD format",
+        )
+    if parsed_day.isoformat() != checkin.day:
+        raise HTTPException(
+            status_code=400,
+            detail="day must be a valid date in YYYY-MM-DD format",
+        )
+
     with closing(get_db()) as conn:
         habit = conn.execute(
             "SELECT id FROM habits WHERE id = ?", (habit_id,)
